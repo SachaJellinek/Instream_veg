@@ -1,41 +1,58 @@
-# In this example the gpkg files are in a subfolder of the working directory
-mwstr_dir <- "mwstr_v13/"  
-# Create a sqlite connection to the database and to the cats layer
-db_m <- RSQLite::dbConnect(drv = RSQLite::SQLite(), 
-                               paste0(mwstr_dir,"mwstr_v13.gpkg"))
-db_c <- RSQLite::dbConnect(drv = RSQLite::SQLite(), 
-                               paste0(mwstr_dir,"mwstr_cats_v13.gpkg"))
+#Load required packages
+requiredPackages <- c("sf","lubridate", "ggplot2", "tidyverse", "dplyr", "RPostgreSQL", "terra")
+lapply(requiredPackages, require, character.only = TRUE)
+library(spsurvey)
+set.seed(51)
 
-# Retrieve site and nextds fields for all subcs and convert to an igraph
-#  objectfor rapid network calculations
-subcs <- RSQLite::dbGetQuery(db_m,"SELECT site, nextds FROM subcs;")
-subcs <- apply(subcs, 2, as.character)
-subcs_ig <- igraph::graph_from_data_frame(subcs)
+# read in the input and snapped points data 
+vv_data <- readxl::read_xlsx('~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_forstream_snap_outputs_201123.xlsx',sheet=1)
+db_mwstr <- RPostgres::dbConnect(RPostgres::Postgres(), "mwstr", host = "localhost", port = 5432, user = "readonly", password = "reachcode_42")
+sites <- vv_data %>% dplyr::select(site_id, reach_v12, carea_km2, af_2022, slope_perc, meanq_mm)
 
-# Retrieve details for Riddells Creek
-riddells_ck <- RSQLite::dbGetQuery(db_m, 
-      "SELECT * FROM stream_names WHERE SUBSTR(str_nm,1,7) = 'RIDDELL';")
-# Inspecting the object riddells_ck reveals strcode for Riddells Creek is 
-# RID, and terminal reach is 11580
+cat_env_var <- DBI::dbGetQuery(db_mwstr, "SELECT reach, ei_2022, af_2022, meanq_mm FROM cat_env")
+slope <- DBI::dbGetQuery(db_mwstr, "SELECT reach, slope_perc FROM subc_env")
+catch_area <- DBI::dbGetQuery(db_mwstr, "SELECT reach, carea_km2 FROM subcs")
 
-# Retrieve all reaches upstream of Riddells Creek's terminal reach
-x <- subcs[igraph::subcomponent(subcs_ig, "11580", "in"),1]
-rid_network <- sf::st_read(db_m, query = paste0("SELECT * FROM streams ",
-                        "WHERE site IN (",paste(x, collapse = ", "), ");"))
+sites4 <- dplyr::left_join(sites, catch_area, by=c("reach_v12" = "reach"))
+sites3 <- dplyr::left_join(sites, slope, by=c("reach_v12" = "reach"))
+sites2 <- dplyr::left_join(sites, cat_env_var, by=c("reach_v12" = "reach"))
+writexl::write_xlsx(sites2, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_201123.xlsx")
 
-# Retrieve Riddells Creek mainstem
-rid_ms <- sf::st_read(db_m, query = 
-          "SELECT * FROM streams WHERE SUBSTR(reach,1,3) = 'RID';")
+"~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalsitesdata.xlsx"
 
-# Retrieve catchment boundary for terminal reach of Riddells Creek
-rid_cat <- sf::st_read(db_c,
-                       query = "SELECT * FROM cats WHERE site = 11580;")
+instream <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
+str(instream)
+#instream$slope_perc %>% dplyr::mutate(across(is.numeric, log))
+instream$slope_perc1 <- log(1+instream$slope_perc)+1
+instream$ei_20221 <- log(1+instream$ei_2022)+1
+eqprob <- grts(instream, n_base = 100)
+plot(eqprob, instream, key.width = lcm(3))
+propprob <- grts(
+  instream,
+  n_base = 100,
+  aux_var = "ei_20221"
+)
+plot(propprob, instream, key.width = lcm(3))
+propprob <- grts(
+  instream,
+  n_base = strata_n,
+  aux_var = "meanq_mm"
+)
 
-# Disconnect database connections
-RSQLite::dbDisconnect(db_m); RSQLite::dbDisconnect(db_c)
-
-# Plot the stream, its tribs and its catchment
-par(mar = c(0,0,0,0))
-plot(rid_network$geom, col = "cornflowerblue")
-plot(rid_ms$geom, col = "blue", lwd = 2, add = TRUE)
-plot(rid_cat$geom, border = "darkgreen", lwd = 2, lty = 2, add = TRUE)
+instream$area <- cut(instream$carea_km2,
+              breaks=c(0, 10, 100, 4000),
+              labels=c('A', 'B', 'C'))
+instream$forest <- cut(instream$af_2022,
+                     breaks=c(-0.1, 0.3, 1),
+                     labels=c('low', 'high'))
+instream$slope <- cut(instream$slope_perc,
+                       breaks=c(-0.1, 1, 10, 30),
+                       labels=c('A', 'B', 'C'))
+strata_n <- c(low = 50, high = 50)
+strat_propprob <- grts(
+  instream,
+  n_base = strata_n,
+  stratum_var = "forest",
+  aux_var = "ei_20221"
+)
+plot(strat_propprob, instream, key.width = lcm(3))
