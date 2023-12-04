@@ -64,6 +64,7 @@ instream$ei <- cut(instream$ei_2022,
                       labels=c('A', 'B'))
 writexl::write_xlsx(instream, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/instream_categories.xlsx")
 
+#Choose sites using sample_n. Maintaining steep slopes and Coastal areas
 cat <- instream %>% dplyr::select(site_id, ei, slope, forest, rain, area, GMUT1DESC)
 coast <- cat %>%filter (GMUT1DESC == "Coast (C)")
 steepslope <- cat %>%filter (slope == "C")
@@ -74,10 +75,6 @@ subset <- rbind(cat4, coast, steepslope)
 s <- terra::vect(subset)
 outfile <- "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/subset_vv_data.shp"
 terra::writeVector(s, outfile, overwrite=TRUE)
-
-vv_data <- merge(subset, vv_scores2)
-library(raster)
-int <- intersect(subset, vv_scores2)
 
 plot(subset, key.width = lcm(3))
 ggplot(data = subset) + 
