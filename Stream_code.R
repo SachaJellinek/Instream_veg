@@ -24,14 +24,7 @@ sites3 <- dplyr::left_join(sites, slope, by=c("reach_v12" = "reach"))
 sites2 <- dplyr::left_join(sites, cat_env_var, by=c("reach_v12" = "reach"))
 writexl::write_xlsx(sites2, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_201123.xlsx")
 
-"~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalsitesdata.xlsx"
-
-#Site selection using GRTS (spsurvey)
-instream <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
-str(instream)
-#instream$slope_perc %>% dplyr::mutate(across(is.numeric, log))
-#instream$slope_perc1 <- (instream$slope_perc)+1
-#instream$ei_20221 <- log(1+instream$ei_2022)+1
+# Plotting variables to look at their distribution
 ggplot(data = instream) + 
   geom_point(mapping = aes(x = meanq_mm, y = site_id))
 ggplot(data = instream) + 
@@ -44,9 +37,8 @@ ggplot(data = instream) +
   geom_point(mapping = aes(x = ei_2022, y = site_id))
 ggplot(data = instream) + 
   geom_point(mapping = aes(x = GMUT1DESC, y = site_id))
-eqprob <- grts(instream, n_base = 100)
-plot(eqprob, instream, key.width = lcm(3))
 
+# Categorising variables
 instream$area <- cut(instream$carea_km2,
                      breaks=c(0, 250, 1000, 4000),
                      labels=c('A', 'B', 'C'))
@@ -57,36 +49,37 @@ instream$forest <- cut(instream$af_2022,
                      breaks=c(-0.1, 0.5, 1),
                      labels=c('A', 'B'))
 instream$slope <- cut(instream$slope_perc,
-                       breaks=c(-0.1, 5, 10, 33),
+                       breaks=c(-0.1, 5, 15, 33),
                        labels=c('A', 'B', 'C'))
 instream$ei <- cut(instream$ei_2022,
-                      breaks=c(-0.1, 0.1, 0.6),
-                      labels=c('A', 'B'))
-writexl::write_xlsx(instream, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/instream_categories.xlsx")
+                      breaks=c(-0.1, 0.05, 0.1, 0.3, 0.6),
+                      labels=c('A', 'B', 'C', 'D'))
+#writexl::write_xlsx(instream, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/instream_categories.xlsx")
 
-#Choose sites using sample_n. Maintaining steep slopes and Coastal areas
+## Choose sites using slice_sample. Maintaining steep slopes and removing Coastal areas
 cat <- instream %>% dplyr::select(site_id, ei, slope, forest, rain, area, GMUT1DESC)
-coast <- cat %>%filter (GMUT1DESC == "Coast (C)")
+#coast <- cat %>%filter (GMUT1DESC == "Coast (C)")
 steepslope <- cat %>%filter (slope == "C")
 cat2<- cat %>% filter(!GMUT1DESC %in% c("Coast (C)"))
 cat3<- cat2 %>% filter(!slope %in% c("C"))
-cat4<- cat3 %>% group_by(GMUT1DESC) %>% sample_n(size = 16)
-subset <- rbind(cat4, coast, steepslope)
+cat4<- cat3 %>% group_by(GMUT1DESC) %>% slice_sample(n = 18)
+subset <- rbind(cat4, steepslope)
+
+plot(subset, key.width = lcm(3))
+
+#save shapefile
 s <- terra::vect(subset)
 outfile <- "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/subset_vv_data.shp"
 terra::writeVector(s, outfile, overwrite=TRUE)
 
-plot(subset, key.width = lcm(3))
-ggplot(data = subset) + 
-  geom_point(mapping = aes(x = rain, y = site_id))
-ggplot(data = subset) + 
-  geom_point(mapping = aes(x = area, y = site_id))
-ggplot(data = subset) + 
-  geom_point(mapping = aes(x = forest, y = site_id))
-ggplot(data = subset) + 
-  geom_point(mapping = aes(x = slope, y = site_id))
-ggplot(data = subset) + 
-  geom_point(mapping = aes(x = ei, y = site_id))
+#Site selection using GRTS (spsurvey)
+instream <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
+str(instream)
+#instream$slope_perc %>% dplyr::mutate(across(is.numeric, log))
+#instream$slope_perc1 <- (instream$slope_perc)+1
+#instream$ei_20221 <- log(1+instream$ei_2022)+1
+eqprob <- grts(instream, n_base = 100)
+plot(eqprob, instream, key.width = lcm(3))
 
 ggplot(data = subset) + 
 propprob <- grts(
@@ -101,15 +94,6 @@ propprob <- grts(
   aux_var = "meanq_mm"
 )
 
-instream$area <- cut(instream$carea_km2,
-              breaks=c(0, 10, 100, 4000),
-              labels=c('A', 'B', 'C'))
-instream$forest <- cut(instream$af_2022,
-                     breaks=c(-0.1, 0.3, 1),
-                     labels=c('low', 'high'))
-instream$slope <- cut(instream$slope_perc,
-                       breaks=c(-0.1, 1, 10, 30),
-                       labels=c('A', 'B', 'C'))
 strata_n <- c(low = 50, high = 50)
 strat_propprob <- grts(
   instream,
