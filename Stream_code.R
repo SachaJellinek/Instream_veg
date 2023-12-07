@@ -1,5 +1,5 @@
 #Load required packages
-requiredPackages <- c("sf","lubridate", "ggplot2", "tidyverse", "dplyr", "RPostgreSQL", "terra")
+requiredPackages <- c("sf","lubridate", "tidyr", "ggplot2", "tidyverse", "dplyr", "RPostgreSQL", "terra")
 lapply(requiredPackages, require, character.only = TRUE)
 library(spsurvey)
 library(rgeoda)
@@ -23,6 +23,12 @@ sites4 <- dplyr::left_join(sites, catch_area, by=c("reach_v12" = "reach"))
 sites3 <- dplyr::left_join(sites, slope, by=c("reach_v12" = "reach"))
 sites2 <- dplyr::left_join(sites, cat_env_var, by=c("reach_v12" = "reach"))
 writexl::write_xlsx(sites2, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_201123.xlsx")
+
+correlation_dat <- instream %>% dplyr::select(carea_km2, ei_2022, af_2022, slope_perc, meanq_mm)
+str(correlation_dat)
+nc_df2 <- correlation_dat %>% st_drop_geometry()
+res <- cor(nc_df2)
+round(res, 2)
 
 # Plotting variables to look at their distribution
 ggplot(data = instream) + 
@@ -56,6 +62,7 @@ instream$ei <- cut(instream$ei_2022,
                       labels=c('A', 'B', 'C', 'D'))
 #writexl::write_xlsx(instream, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/instream_categories.xlsx")
 
+
 ## Choose sites using slice_sample. Maintaining steep slopes and removing Coastal areas
 cat <- instream %>% dplyr::select(site_id, ei, slope, forest, rain, area, GMUT1DESC)
 #coast <- cat %>%filter (GMUT1DESC == "Coast (C)")
@@ -64,6 +71,9 @@ cat2<- cat %>% filter(!GMUT1DESC %in% c("Coast (C)"))
 cat3<- cat2 %>% filter(!slope %in% c("C"))
 cat4<- cat3 %>% group_by(GMUT1DESC) %>% slice_sample(n = 18)
 subset <- rbind(cat4, steepslope)
+cat3DF <- cat3 %>% st_drop_geometry()
+group <- cat3DF %>% tidyr::expand(slope, rain, area, forest, ei)
+dplyr::select
 
 plot(subset, key.width = lcm(3))
 
