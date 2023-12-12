@@ -9,9 +9,12 @@ library(purrr)
 vv_data <- readxl::read_xlsx('~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_forstream_snap_outputs_201123.xlsx',sheet=1)
 vv_slope <- readxl::read_xlsx('~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Slope_extra.xlsx',sheet=1)
 vv_scores <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/points_with_vv_fixed_sj_reprojxy.shp")
-vv_scores2 <- vv_scores %>% dplyr::select(Site_ID, vv_A_struc, vv_B_richn, vv_E_regen, vv_D_patch, vv_C_instr, vv_overall, vv_vv_scor)
+vv_scores2 <- vv_scores %>% dplyr::select(Site_ID, vv_A_struc, vv_B_richn, vv_E_regen, vv_D_patch, vv_C_instr, vv_overall, vv_vv_scor, xcoord, ycoord)
 vv_scores2 <- vv_scores2 %>% 
-  rename("site_id" = "Site_ID")
+  rename("site_id" = "Site_ID")%>% 
+  rename("x" = "xcoord") %>% 
+  rename("y" = "ycoord")
+
 db_mwstr <- RPostgres::dbConnect(RPostgres::Postgres(), "mwstr", host = "localhost", port = 5432, user = "readonly", password = "reachcode_42")
 sites <- vv_data %>% dplyr::select(site_id, reach_v12, carea_km2, af_2022, slope_perc, meanq_mm)
 
@@ -66,13 +69,12 @@ instream$ei <- cut(instream$ei_2022,
                       breaks=c(-0.1, 0.05, 0.1, 0.3, 0.6),
                       labels=c('A', 'B', 'C', 'D'))
 #writexl::write_xlsx(instream, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/instream_categories.xlsx")
-
 ## Choose sites using slice_sample. Maintaining steep slopes and removing Coastal areas
 cat <- instream %>% dplyr::select(site_id, ei, slope, forest, rain, area, GMUT1DESC)
 cat1<- cat %>% filter(!GMUT1DESC %in% c("Coast (C)"))
 cat1DF <- cat1 %>% st_drop_geometry()
 group1 <- cat1DF %>% tidyr::expand(slope, rain, area, forest, ei)
-group2 <- cat1DF %>% tidyr::expand(nesting(site_id, slope, rain, area, forest, ei))
+group2 <- cat1DF %>% tidyr::expand(nesting(site_id, slope, rain, area, ei))
 ## Write groups of site combinations to excel for manual grouping using concatenate
 writexl::write_xlsx(group2, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Site_ID_categories_a.xlsx")
 ## 33 groups of combinatations excluding atenuated forest cover
@@ -81,12 +83,16 @@ group3 <- group2 %>%
   count
 #Read in new dataset
 site_cat <- readxl::read_xlsx('~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Site_ID_categories.xlsx',sheet=1)
-
+geo <- instream %>% dplyr::select(site_id, GMUT1DESC)
+geo2 <- geo %>% st_drop_geometry()
+vvscores <- vv_scores2 %>% st_drop_geometry()
+site_cat <- left_join(site_cat, geo2)
+site_cat <- left_join(site_cat, vvscores)
 #All groups with less that 3 sites and steep slopes. Coastal sites excluded and attenuated forest cover not included in groups
 target_1 <- c("AABB","ABAB","ACAB","ACBD","ACCB","ADBA","ADCA","BBAC","BCAD","CAAA","CDAA","CCAA")
 grp1 <- filter(site_cat, group %in% target_1)
 sites_AAAA <- filter(site_cat, group == "AAAA")
-grp2<- sites_AAAA %>% slice_sample(n = 4)
+grp2<- sites_AAAA %>% group_by(GMUT1DESC) %>% slice_sample(n = 3)
 sites_4 <- filter(site_cat, group == "AABC")
 grp3<- sites_4 %>% slice_sample(n = 4)
 sites_5 <- filter(site_cat, group == "AAAD")
@@ -108,11 +114,11 @@ grp11<- sites_17 %>% slice_sample(n = 4)
 sites_20 <- filter(site_cat, group == "ADAA")
 grp12<- sites_20 %>% slice_sample(n = 4)
 sites_22 <- filter(site_cat, group == "AABA")
-grp13<- sites_22 %>% slice_sample(n = 4)
+grp13<- sites_22 %>% slice_sample(n = 3)
 sites_49 <- filter(site_cat, group == "ACAA")
 grp14<- sites_49 %>% slice_sample(n = 4)
 sites_95 <- filter(site_cat, group == "ABAA")
-grp15<- sites_95 %>% slice_sample(n = 4)
+grp15<- sites_95 %>% group_by(GMUT1DESC) %>% slice_sample(n = 2)
 sites_4b <- filter(site_cat, group == "ABBA")
 grp16<- sites_4b %>% slice_sample(n = 4)
 sites_4c <- filter(site_cat, group == "BAAA")
@@ -129,27 +135,29 @@ sites_11b <- filter(site_cat, group == "ACCA")
 grp22<- sites_11b %>% slice_sample(n = 4)
 grouped <- rbind(grp1,grp2,grp3,grp4,grp5,grp6,grp7,grp8,grp9,grp10,grp11,grp12,grp13,grp14,grp15,grp16,grp17,grp18,grp19,grp20,grp21,grp22)
 
-instream2_nogeo <- instream2 %>% st_drop_geometry()
-joined <- left_join(grouped, instream2_nogeo)
-
-ggplot(data = grouped) + 
+grouped2<- grouped %>% filter(!site_id %in% c(175, 88, 318, 20, 242, 399, 493, 467, 425, 435, 118, 242))
+ggplot(data = grouped2) + 
   geom_point(mapping = aes(x = slope, y = site_id))
-ggplot(data = grouped) + 
+ggplot(data = grouped2) + 
   geom_point(mapping = aes(x = rain, y = site_id))
-ggplot(data = grouped) + 
+ggplot(data = grouped2) + 
   geom_point(mapping = aes(x = area, y = site_id))
-ggplot(data = grouped) + 
+ggplot(data = grouped2) + 
   geom_point(mapping = aes(x = ei, y = site_id))
-ggplot(data = joined) + 
+ggplot(data = grouped2) + 
   geom_point(mapping = aes(x = GMUT1DESC, y = site_id))
-
+ggplot(data = grouped2) + 
+  geom_point(mapping = aes(x = vv_vv_scor, y = site_id))
+ggplot(data = grouped2) + 
+  geom_point(mapping = aes(x = vv_C_instr, y = site_id))
 #save shapefile
-joined_shp <- st_as_sf(x = joined, 
+grouped2shp <- st_as_sf(x = grouped2, 
                         coords = c("x", "y"),
                         crs = 7855)
+plot(grouped2shp, key.width = lcm(3))
 plot(joined_shp, key.width = lcm(3))
-s <- terra::vect(joined_shp)
-outfile <- "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/subset_vv_data2.shp"
+s <- terra::vect(grouped2shp)
+outfile <- "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/subset_vv_data121223.shp"
 terra::writeVector(s, outfile, overwrite=TRUE)
 
 #Site selection using GRTS (spsurvey)
