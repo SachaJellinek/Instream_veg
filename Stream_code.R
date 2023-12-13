@@ -28,6 +28,10 @@ sites3 <- dplyr::left_join(sites, slope, by=c("reach_v12" = "reach"))
 sites2 <- dplyr::left_join(sites, cat_env_var, by=c("reach_v12" = "reach"))
 writexl::write_xlsx(sites2, "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_201123.xlsx")
 
+instream <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
+str(instream)
+instream2 <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
+str(instream2)
 correlation_dat <- instream %>% dplyr::select(carea_km2, ei_2022, af_2022, slope_perc, meanq_mm)
 str(correlation_dat)
 nc_df2 <- correlation_dat %>% st_drop_geometry()
@@ -48,10 +52,6 @@ ggplot(data = instream) +
 ggplot(data = instream) + 
   geom_point(mapping = aes(x = GMUT1DESC, y = site_id))
 
-instream <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
-str(instream)
-instream2 <- st_read("~/uomShare/wergProj/W12 - Revegetation/Instream_veg/VV_sites_envdata_221123_finalssitesdata.shp")
-str(instream2)
 # Categorising variables
 instream$area <- cut(instream$carea_km2,
                      breaks=c(0, 250, 1000, 4000),
@@ -88,7 +88,7 @@ geo2 <- geo %>% st_drop_geometry()
 vvscores <- vv_scores2 %>% st_drop_geometry()
 site_cat <- left_join(site_cat, geo2)
 site_cat <- left_join(site_cat, vvscores)
-#All groups with less that 3 sites and steep slopes. Coastal sites excluded and attenuated forest cover not included in groups
+#All groups with less than 4 sites and steep slopes. Coastal sites excluded and attenuated forest cover not included in groups
 target_1 <- c("AABB","ABAB","ACAB","ACBD","ACCB","ADBA","ADCA","BBAC","BCAD","CAAA","CDAA","CCAA")
 grp1 <- filter(site_cat, group %in% target_1)
 sites_AAAA <- filter(site_cat, group == "AAAA")
@@ -135,29 +135,41 @@ sites_11b <- filter(site_cat, group == "ACCA")
 grp22<- sites_11b %>% slice_sample(n = 4)
 grouped <- rbind(grp1,grp2,grp3,grp4,grp5,grp6,grp7,grp8,grp9,grp10,grp11,grp12,grp13,grp14,grp15,grp16,grp17,grp18,grp19,grp20,grp21,grp22)
 
-grouped2<- grouped %>% filter(!site_id %in% c(175, 88, 318, 20, 242, 399, 493, 467, 425, 435, 118, 242))
-ggplot(data = grouped2) + 
+grouped2<- grouped %>% filter(!site_id %in% c(175, 318, 20, 242, 399, 493, 467, 425, 435, 118, 242))
+# Remove for romp sites
+groupedRomp<- grouped2 %>% filter(!site_id %in% c(465, 128, 144, 422, 388, 60, 13, 487, 89))
+# Remove for macro sites
+groupedMacroRomp<- groupedRomp %>% filter(!site_id %in% c(307, 89, 156, 172, 408, 400, 381, 335, 429))
+# Romp and macro sites to add
+Romp <- c("466", "152", "135", "298", "409", "50", "37", "86", "10")
+Macro <- c("313", "164", "114", "52", "382", "336", "278")
+Rompsites <- filter(site_cat, site_id %in% Romp)
+Macrosites <- filter(site_cat, site_id %in% Macro)
+Romp_macro <- rbind(Rompsites, Macrosites)
+finalsites <- rbind(groupedMacroRomp, Romp_macro)
+
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = slope, y = site_id))
-ggplot(data = grouped2) + 
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = rain, y = site_id))
-ggplot(data = grouped2) + 
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = area, y = site_id))
-ggplot(data = grouped2) + 
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = ei, y = site_id))
-ggplot(data = grouped2) + 
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = GMUT1DESC, y = site_id))
-ggplot(data = grouped2) + 
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = vv_vv_scor, y = site_id))
-ggplot(data = grouped2) + 
+ggplot(data = finalsites) + 
   geom_point(mapping = aes(x = vv_C_instr, y = site_id))
 #save shapefile
-grouped2shp <- st_as_sf(x = grouped2, 
+finalsitesshp <- st_as_sf(x = finalsites, 
                         coords = c("x", "y"),
                         crs = 7855)
-plot(grouped2shp, key.width = lcm(3))
-plot(joined_shp, key.width = lcm(3))
-s <- terra::vect(grouped2shp)
-outfile <- "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/subset_vv_data121223.shp"
+plot(finalsitesshp, key.width = lcm(3))
+plot(finalsitesshp, key.width = lcm(3))
+s <- terra::vect(finalsitesshp)
+outfile <- "~/uomShare/wergProj/W12 - Revegetation/Instream_veg/Veg_Visions_2021_sites_middle/finalsubset_vv_data131223_2.shp"
 terra::writeVector(s, outfile, overwrite=TRUE)
 
 #Site selection using GRTS (spsurvey)
